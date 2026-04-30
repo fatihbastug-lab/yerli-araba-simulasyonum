@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, orientation=landscape">
+    <title>Manuel Sürüş Akademisi</title>
+    <style>
+        :root { --blue: #3b82f6; --green: #22c55e; --red: #ef4444; --bg: #0f172a; }
+        body { margin: 0; background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; touch-action: none; }
+        
+        #ui-layer { display: flex; justify-content: space-between; align-items: center; height: 100vh; padding: 30px; box-sizing: border-box; }
+
+        /* Pedallar */
+        .pedal-group { display: flex; flex-direction: column; align-items: center; width: 100px; }
+        .pedal-rail { width: 70px; height: 220px; background: #1e293b; border: 3px solid #334155; border-radius: 15px; position: relative; overflow: hidden; }
+        .pedal-fill { position: absolute; bottom: 0; width: 100%; transition: height 0.05s ease-out; }
+        #clutch-fill { background: linear-gradient(to top, #1d4ed8, var(--blue)); }
+        #gas-fill { background: linear-gradient(to top, #15803d, var(--green)); }
+        .label { margin-top: 10px; font-size: 12px; font-weight: bold; color: #94a3b8; }
+
+        /* Gösterge Paneli */
+        #dash { flex-grow: 1; display: flex; flex-direction: column; align-items: center; }
+        .gauges { display: flex; gap: 30px; margin-bottom: 20px; }
+        .gauge-circle { width: 140px; height: 140px; border-radius: 50%; border: 6px solid #334155; background: radial-gradient(#1e293b, #020617); display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
+        .gauge-circle span { font-size: 32px; font-weight: 800; }
+        .gauge-circle label { font-size: 12px; color: #64748b; }
+        
+        #status-bar { height: 40px; font-size: 18px; font-weight: bold; color: #fbbf24; text-align: center; margin-bottom: 10px; }
+
+        /* Vites Bölümü */
+        .shifter { display: grid; grid-template-columns: repeat(3, 65px); gap: 12px; }
+        .gear-node { width: 65px; height: 65px; background: #1e293b; border: 2px solid #334155; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .gear-node.active { background: var(--red); border-color: white; box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); transform: scale(1.1); }
+    </style>
+</head>
+<body>
+
+<div id="ui-layer">
+    <div class="pedal-group">
+        <div class="pedal-rail" id="clutch-p">
+            <div id="clutch-fill" class="pedal-fill" style="height: 0%"></div>
+        </div>
+        <div class="label">DEBRİYAJ (L)</div>
+    </div>
+
+    <div id="dash">
+        <div id="status-bar">MOTOR HAZIR</div>
+        <div class="gauges">
+            <div class="gauge-circle">
+                <span id="txt-speed">0</span>
+                <label>KM/H</label>
+            </div>
+            <div class="gauge-circle">
+                <span id="txt-rpm">800</span>
+                <label>RPM</label>
+            </div>
+        </div>
+
+        <div class="shifter">
+            <div class="gear-node" onclick="setGear(1, event)">1</div>
+            <div class="gear-node" onclick="setGear(3, event)">3</div>
+            <div class="gear-node" onclick="setGear(5, event)">5</div>
+            <div class="gear-node" onclick="setGear(2, event)">2</div>
+            <div class="gear-node" onclick="setGear(4, event)">4</div>
+            <div class="gear-node active" onclick="setGear(0, event)">N</div>
+        </div>
+    </div>
+
+    <div class="pedal-group">
+        <div class="pedal-rail" id="gas-p">
+            <div id="gas-fill" class="pedal-fill" style="height: 0%"></div>
+        </div>
+        <div class="label">GAZ (R)</div>
+    </div>
+</div>
+
+<script>
+    let speed = 0, rpm = 800, gear = 0, clutchVal = 0, gasVal = 0;
+    let isRunning = true;
+
+    // Pedal Kontrol Fonksiyonu
+    function initPedal(id, fillId, callback) {
+        const el = document.getElementById(id);
+        const fill = document.getElementById(fillId);
+        const handle = (e) => {
+            const rect = el.getBoundingClientRect();
+            const touchY = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+            let percent = Math.max(0, Math.min(1, 1 - (touchY / rect.height)));
+            fill.style.height = (percent * 100) + "%";
+            callback(percent);
+        };
+        el.addEventListener('touchstart', handle);
+        el.addEventListener('touchmove', handle);
+        el.addEventListener('touchend', () => { fill.style.height = "0%"; callback(0); });
+    }
+
+    initPedal('clutch-p', 'clutch-fill', v => clutchVal = v);
+    initPedal('gas-p', 'gas-fill', v => gasVal = v);
+
+    function setGear(g, e) {
+        if (clutchVal > 0.85) {
+            gear = g;
+            document.querySelectorAll('.gear-node').forEach(n => n.classList.remove('active'));
+            e.target.classList.add('active');
+            updateStatus(g === 0 ? "VİTES: BOŞTA" : "VİTES: " + g);
+        } else {
+            updateStatus("ŞANZIMAN SESİ: GIRRRÇ! (Debriyaj?)");
+        }
+    }
+
+    function updateStatus(msg) {
+        document.getElementById('status-bar').innerText = msg;
+    }
+
+    function loop() {
+        if (!isRunning) return;
+
+        // RPM Simülasyonu
+        if (gasVal > 0) {
+            rpm += (gear === 0 || clutchVal > 0.4) ? (gasVal * 180) : (gasVal * 80 / gear);
+        } else {
+            rpm -= 45;
+        }
+
+        // Stop Etme Mantığı (Gerçekçi Kavrama)
+        if (gear > 0 && clutchVal < 0.25 && speed < 8 && gasVal < 0.15) {
+            isRunning = false;
+            updateStatus("STOP ETTİ! (Yarım Debriyaj Yapılmadı)");
+            document.getElementById('status-bar').style.color = "#ef4444";
+        }
+
+        // Hızlanma
+        if (gear > 0 && clutchVal < 0.5) {
+            let targetSpeed = (rpm * gear) / 110;
+            speed += (targetSpeed - speed) * 0.04;
+        } else {
+            speed *= 0.992; // Motor freni/Sürtünme
+        }
+
+        // Limitler
+        if (rpm > 7000) { rpm = 7000; updateStatus("VİTES AT!"); }
+        if (rpm < 800) rpm = 800;
+        if (speed < 0) speed = 0;
+
+        document.getElementById('txt-speed').innerText = Math.round(speed);
+        document.getElementById('txt-rpm').innerText = Math.round(rpm);
+        requestAnimationFrame(loop);
+    }
+
+    loop();
+</script>
+</body>
+</html>
